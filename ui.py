@@ -4,6 +4,8 @@ Provides an interactive dashboard for live video feeds, model adjustments,
 and database logging inspection.
 """
 
+import os
+import sys
 import time
 from typing import Optional
 import cv2
@@ -93,7 +95,7 @@ def render_dashboard(detector: YOLODetector, db_manager: DatabaseManager):
     # Source Selection
     source_type = st.sidebar.selectbox(
         "📹 Video Source",
-        ["Webcam", "Upload Video File", "Generate Demo Synthetic Stream"],
+        ["Demo Sample Video (Included)", "Webcam", "Upload Video File", "Generate Demo Synthetic Stream"],
         index=0
     )
 
@@ -142,6 +144,11 @@ def render_dashboard(detector: YOLODetector, db_manager: DatabaseManager):
         help="Prevents inserting hundreds of duplicate rows when an object remains in the frame."
     )
 
+    if st.sidebar.button("📥 Seed Sample Detection Events"):
+        seeded_count = db_manager.seed_sample_logs(count=15)
+        st.sidebar.success(f"Added {seeded_count} sample detection events!")
+        st.rerun()
+
     if st.sidebar.button("🔄 Reconnect Database"):
         new_status = db_manager.reconnect()
         st.sidebar.success(f"Backend: {new_status['backend']}")
@@ -149,6 +156,7 @@ def render_dashboard(detector: YOLODetector, db_manager: DatabaseManager):
     if st.sidebar.button("🗑️ Clear Database Logs"):
         if db_manager.clear_logs():
             st.sidebar.success("Database logs wiped successfully.")
+            st.rerun()
         else:
             st.sidebar.error("Failed to clear logs.")
 
@@ -210,8 +218,20 @@ def render_dashboard(detector: YOLODetector, db_manager: DatabaseManager):
         cap = None
         temp_video_path = None
 
-        if source_type == "Webcam":
-            cap = cv2.VideoCapture(camera_idx)
+        if source_type == "Demo Sample Video (Included)":
+            demo_path = "sample_demo.mp4"
+            if os.path.exists(demo_path):
+                cap = cv2.VideoCapture(demo_path)
+            else:
+                st.error("Demo video 'sample_demo.mp4' not found.")
+                return
+        elif source_type == "Webcam":
+            if sys.platform.startswith("win"):
+                cap = cv2.VideoCapture(int(camera_idx), cv2.CAP_DSHOW)
+                if not cap.isOpened():
+                    cap = cv2.VideoCapture(int(camera_idx))
+            else:
+                cap = cv2.VideoCapture(int(camera_idx))
         elif source_type == "Upload Video File" and uploaded_file is not None:
             import tempfile
             tfile = tempfile.NamedTemporaryFile(delete=False)
@@ -221,7 +241,7 @@ def render_dashboard(detector: YOLODetector, db_manager: DatabaseManager):
         elif source_type == "Generate Demo Synthetic Stream":
             cap = None  # Synthetic handler below
 
-        if source_type in ("Webcam", "Upload Video File"):
+        if source_type in ("Demo Sample Video (Included)", "Webcam", "Upload Video File"):
             if cap is None or not cap.isOpened():
                 st.error(f"Could not open video source '{source_type}'. If using Webcam, check your camera permissions or index.")
                 return
@@ -231,21 +251,32 @@ def render_dashboard(detector: YOLODetector, db_manager: DatabaseManager):
         try:
             while run_stream:
                 if source_type == "Generate Demo Synthetic Stream":
-                    # Generate a clean test frame with moving geometric objects for demonstration
-                    frame = np.full((480, 640, 3), 40, dtype=np.uint8)
-                    t_val = time.time()
-                    # Draw a moving simulated "person" rectangle
-                    px = int(200 + 100 * np.sin(t_val * 1.5))
-                    py = int(180 + 40 * np.cos(t_val * 1.5))
-                    cv2.rectangle(frame, (px, py), (px + 120, py + 220), (200, 200, 200), -1)
-                    cv2.putText(frame, "Demo Stream", (20, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                    # Simulated cell phone
-                    cv2.rectangle(frame, (px + 30, py + 80), (px + 70, py + 140), (80, 80, 80), -1)
+                    # Generate an animated frame with realistic scene for YOLO detection
+                    scene_path = "sample_scene.jpg"
+                    if os.path.exists(scene_path):
+                        scene_img = cv2.imread(scene_path)
+                    else:
+                        scene_img = None
+
+                    if scene_img is not None:
+                        t_val = time.time()
+                        sx = int(15 * np.sin(t_val * 1.5))
+                        sy = int(10 * np.cos(t_val * 1.5))
+                        M = np.float32([[1, 0, sx], [0, 1, sy]])
+                        frame = cv2.warpAffine(scene_img, M, (scene_img.shape[1], scene_img.shape[0]))
+                        frame = cv2.resize(frame, (640, 480))
+                    else:
+                        frame = np.full((480, 640, 3), 40, dtype=np.uint8)
+                        t_val = time.time()
+                        px = int(200 + 100 * np.sin(t_val * 1.5))
+                        py = int(180 + 40 * np.cos(t_val * 1.5))
+                        cv2.rectangle(frame, (px, py), (px + 120, py + 220), (200, 200, 200), -1)
+                        cv2.putText(frame, "Demo Stream", (20, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
                 else:
                     ret, frame = cap.read()
                     if not ret:
                         # Video finished or webcam disconnect
-                        if source_type == "Upload Video File":
+                        if source_type in ("Upload Video File", "Demo Sample Video (Included)"):
                             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Loop video
                             continue
                         else:

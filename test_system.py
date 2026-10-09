@@ -83,14 +83,25 @@ try:
     out_path = "sample_demo.mp4"
     out = cv2.VideoWriter(out_path, fourcc, 20.0, (640, 480))
 
-    # Generate 60 frames (3 seconds) of synthetic demo
-    for i in range(60):
-        frame = np.full((480, 640, 3), 50, dtype=np.uint8)
-        cx = int(320 + 150 * np.sin(i / 10.0))
-        cy = int(240 + 80 * np.cos(i / 10.0))
-        cv2.circle(frame, (cx, cy), 40, (0, 165, 255), -1)
-        cv2.putText(frame, f"Demo Frame {i+1}", (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        out.write(frame)
+    # Generate realistic video if sample_scene.jpg exists
+    if os.path.exists("sample_scene.jpg"):
+        scene_img = cv2.imread("sample_scene.jpg")
+        h, w = scene_img.shape[:2]
+        for i in range(120): # 6 seconds
+            shift_x = int(12 * np.sin(i / 15.0))
+            shift_y = int(8 * np.cos(i / 15.0))
+            M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
+            shifted = cv2.warpAffine(scene_img, M, (w, h))
+            resized = cv2.resize(shifted, (640, 480))
+            out.write(resized)
+    else:
+        for i in range(60):
+            frame = np.full((480, 640, 3), 50, dtype=np.uint8)
+            cx = int(320 + 150 * np.sin(i / 10.0))
+            cy = int(240 + 80 * np.cos(i / 10.0))
+            cv2.circle(frame, (cx, cy), 40, (0, 165, 255), -1)
+            cv2.putText(frame, f"Demo Frame {i+1}", (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            out.write(frame)
     out.release()
     print(f"  [PASS] Sample demo video generated: {out_path} ({os.path.getsize(out_path)} bytes)")
 except Exception as e:

@@ -36,7 +36,13 @@ def run_opencv_mode(camera_index: int = 0, conf_thresh: float = 0.50, enable_log
     print("* YOLO Model Loaded successfully.")
     print("* Press 'q' or 'ESC' on the OpenCV window to exit.\n")
 
-    cap = cv2.VideoCapture(camera_index)
+    if sys.platform.startswith("win"):
+        cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(camera_index)
+    else:
+        cap = cv2.VideoCapture(camera_index)
+
     if not cap.isOpened():
         print(f"[ERROR] Cannot open camera with index {camera_index}.")
         print("[TIP] Try with an uploaded video or synthetic stream via Streamlit dashboard.")
@@ -110,7 +116,15 @@ def main():
     parser.add_argument("--no-log", action="store_true", help="Disable database logging")
 
     # Detect if invoked by streamlit runner directly
-    if "streamlit" in sys.modules and any("run" in arg for arg in sys.argv):
+    is_streamlit = False
+    try:
+        import streamlit as st
+        if hasattr(st, "runtime") and st.runtime.exists():
+            is_streamlit = True
+    except Exception:
+        pass
+
+    if is_streamlit or ("streamlit" in sys.modules and any("run" in arg for arg in sys.argv)):
         run_streamlit_dashboard()
         return
 
